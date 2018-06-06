@@ -535,11 +535,13 @@ static void init_endpoints(void)
 		/* Setup endpoint 1 Output buffer descriptor.
 		   Input and output are from the HOST perspective. */
 		BDSnOUT(i,0).BDnADR = (BDNADR_TYPE) PHYS_ADDR(ep_buf[i].out);
-		SET_BDN(BDSnOUT(i,0), BDNSTAT_UOWN|BDNSTAT_DTSEN, ep_buf[i].out_len);
+		SET_BDN(BDSnOUT(i,0), BDNSTAT_DTSEN, ep_buf[i].out_len);
+		BDSnOUT(i,0).STAT.UOWN = 1;
 #ifdef PPB_EPn
 		/* Initialize EVEN buffers when in ping-pong mode. */
 		BDSnOUT(i,1).BDnADR = (BDNADR_TYPE) PHYS_ADDR(ep_buf[i].out1);
-		SET_BDN(BDSnOUT(i,1), BDNSTAT_UOWN|BDNSTAT_DTSEN|BDNSTAT_DTS, ep_buf[i].out_len);
+		SET_BDN(BDSnOUT(i,1), BDNSTAT_DTSEN|BDNSTAT_DTS, ep_buf[i].out_len);
+		BDSnOUT(i,1).STAT.UOWN = 1;
 #endif
 		/* Setup endpoint 1 Input buffer descriptor.
 		   Input and output are from the HOST perspective. */
@@ -695,9 +697,11 @@ static void reset_bd0_out(void)
 	 * Set the length and hand it back to the SIE.
 	 * The Address stays the same. */
 #ifdef PPB_EP0_OUT
-	SET_BDN(BDS0OUT(SFR_USB_STATUS_PPBI), BDNSTAT_UOWN, EP_0_LEN);
+	SET_BDN(BDS0OUT(SFR_USB_STATUS_PPBI), 0, EP_0_LEN);
+	BDS0OUT(SFR_USB_STATUS_PPBI).STAT.UOWN = 1;
 #else
-	SET_BDN(BDS0OUT(0), BDNSTAT_UOWN, EP_0_LEN);
+	SET_BDN(BDS0OUT(0), 0, EP_0_LEN);
+	BDS0OUT(0).STAT.UOWN = 1;
 #endif
 }
 
@@ -706,10 +710,12 @@ static void stall_ep0(void)
 	/* Stall Endpoint 0. It's important that DTSEN and DTS are zero. */
 #ifdef PPB_EP0_IN
 	uint8_t ppbi = (ep0_buf.flags & EP_TX_PPBI)? 1: 0;
-	SET_BDN(BDS0IN(ppbi), BDNSTAT_UOWN|BDNSTAT_BSTALL, EP_0_LEN);
+	SET_BDN(BDS0IN(ppbi), BDNSTAT_BSTALL, EP_0_LEN);
+	BDS0IN(ppbi).STAT.UOWN = 1;
 	/* The PPBI does not advance for STALL. */
 #else
-	SET_BDN(BDS0IN(0), BDNSTAT_UOWN|BDNSTAT_BSTALL, EP_0_LEN);
+	SET_BDN(BDS0IN(0), BDNSTAT_BSTALL, EP_0_LEN);
+	BDS0IN(0).STAT.UOWN = 1;
 #endif
 }
 
@@ -733,9 +739,11 @@ static void stall_ep_in(uint8_t ep)
 	/* Stall Endpoint. It's important that DTSEN and DTS are zero.
 	 * Although the datasheet doesn't stay it, the only safe way to do this
 	 * is to set BSTALL on BOTH buffers when in ping-pong mode. */
-	SET_BDN(BDSnIN(ep, 0), BDNSTAT_UOWN|BDNSTAT_BSTALL, ep_buf[ep].in_len);
+	SET_BDN(BDSnIN(ep, 0), BDNSTAT_BSTALL, ep_buf[ep].in_len);
+	BDSnIN(ep, 0).STAT.UOWN = 1;
 #ifdef PPB_EPn
-	SET_BDN(BDSnIN(ep, 1), BDNSTAT_UOWN|BDNSTAT_BSTALL, ep_buf[ep].in_len);
+	SET_BDN(BDSnIN(ep, 1), BDNSTAT_BSTALL, ep_buf[ep].in_len);
+	BDSnIN(ep, 1).STAT.UOWN = 1;
 #endif
 }
 
@@ -744,9 +752,11 @@ static void stall_ep_out(uint8_t ep)
 	/* Stall Endpoint. It's important that DTSEN and DTS are zero.
 	 * Although the datasheet doesn't stay it, the only safe way to do this
 	 * is to set BSTALL on BOTH buffers when in ping-pong mode. */
-	SET_BDN(BDSnOUT(ep, 0), BDNSTAT_UOWN|BDNSTAT_BSTALL , 0);
+	SET_BDN(BDSnOUT(ep, 0), BDNSTAT_BSTALL , 0);
+	BDSnOUT(ep, 0).STAT.UOWN = 1;
 #ifdef PPB_EPn
-	SET_BDN(BDSnOUT(ep, 1), BDNSTAT_UOWN|BDNSTAT_BSTALL , 0);
+	SET_BDN(BDSnOUT(ep, 1), BDNSTAT_BSTALL , 0);
+	BDSnOUT(ep, 1).STAT.UOWN = 1;
 #endif
 }
 
@@ -759,11 +769,13 @@ static void send_zero_length_packet_ep0()
 #ifdef PPB_EP0_IN
 	uint8_t ppbi = (ep0_buf.flags & EP_TX_PPBI)? 1: 0;
 	BDS0IN(ppbi).STAT.BDnSTAT = 0;
-	SET_BDN(BDS0IN(ppbi), BDNSTAT_UOWN|BDNSTAT_DTS|BDNSTAT_DTSEN, 0);
+	SET_BDN(BDS0IN(ppbi), BDNSTAT_DTS|BDNSTAT_DTSEN, 0);
 	ep0_buf.flags ^= EP_TX_PPBI;
+	BDS0IN(ppbi).STAT.UOWN = 1;
 #else
 	BDS0IN(0).STAT.BDnSTAT = 0;
-	SET_BDN(BDS0IN(0), BDNSTAT_UOWN|BDNSTAT_DTS|BDNSTAT_DTSEN, 0);
+	SET_BDN(BDS0IN(0), BDNSTAT_DTS|BDNSTAT_DTSEN, 0);
+	BDS0IN(0).STAT.UOWN = 1;
 #endif
 }
 
@@ -779,13 +791,14 @@ static void usb_send_in_buffer_0(size_t len)
 
 		if (pid)
 			SET_BDN(*bd,
-				BDNSTAT_UOWN|BDNSTAT_DTS|BDNSTAT_DTSEN, len);
+				BDNSTAT_DTS|BDNSTAT_DTSEN, len);
 		else
 			SET_BDN(*bd,
-				BDNSTAT_UOWN|BDNSTAT_DTSEN, len);
+				BDNSTAT_DTSEN, len);
 
 		ep0_buf.flags ^= EP_TX_PPBI;
 		ep0_buf.flags ^= EP_TX_DTS;
+		bd->STAT.UOWN = 1;
 #else
 		uint8_t pid;
 		pid = (ep0_buf.flags & EP_TX_DTS)? 1 : 0;
@@ -793,12 +806,13 @@ static void usb_send_in_buffer_0(size_t len)
 
 		if (pid)
 			SET_BDN(BDS0IN(0),
-				BDNSTAT_UOWN|BDNSTAT_DTS|BDNSTAT_DTSEN, len);
+				BDNSTAT_DTS|BDNSTAT_DTSEN, len);
 		else
 			SET_BDN(BDS0IN(0),
-				BDNSTAT_UOWN|BDNSTAT_DTSEN, len);
+				BDNSTAT_DTSEN, len);
 
 		ep0_buf.flags ^= EP_TX_DTS;
+		BDS0IN(0).STAT.UOWN = 1;
 #endif
 	}
 }
@@ -1111,16 +1125,19 @@ static inline int8_t handle_standard_control_request()
 #ifdef PPB_EPn
 							uint8_t ppbi = (ep_buf[ep_num].flags & EP_RX_PPBI)? 1 : 0;
 							/* Put the current buffer at DTS 0, and the next (opposite) buffer at DTS 1 */
-							SET_BDN(BDSnOUT(ep_num, ppbi), BDNSTAT_UOWN|BDNSTAT_DTSEN, ep_buf[ep_num].out_len);
-							SET_BDN(BDSnOUT(ep_num, !ppbi), BDNSTAT_UOWN|BDNSTAT_DTSEN|BDNSTAT_DTS, ep_buf[ep_num].out_len);
+							SET_BDN(BDSnOUT(ep_num, ppbi), BDNSTAT_DTSEN, ep_buf[ep_num].out_len);
+							SET_BDN(BDSnOUT(ep_num, !ppbi), BDNSTAT_DTSEN|BDNSTAT_DTS, ep_buf[ep_num].out_len);
 
 							/* Clear DTS */
 							ep_buf[ep_num].flags &= ~EP_RX_DTS;
+							BDSnOUT(ep_num, ppbi).STAT.UOWN = 1;
+							BDSnOUT(ep_num, !ppbi).STAT.UOWN = 1;
 #else
-							SET_BDN(BDSnOUT(ep_num, 0), BDNSTAT_UOWN|BDNSTAT_DTSEN, ep_buf[ep_num].out_len);
+							SET_BDN(BDSnOUT(ep_num, 0), BDNSTAT_DTSEN, ep_buf[ep_num].out_len);
 
 							/* Set DTS */
 							ep_buf[ep_num].flags |= EP_RX_DTS;
+							BDSnOUT(ep_num, 0).STAT.UOWN = 1;
 #endif
 							ep_buf[ep_num].flags &= ~(EP_OUT_HALT_FLAG);
 						}
@@ -1545,14 +1562,15 @@ void usb_send_in_buffer(uint8_t endpoint, size_t len)
 		bd->STAT.BDnSTAT = 0;
 
 		if (pid)
-			SET_BDN(BDSnIN(endpoint,ppbi),
-				BDNSTAT_UOWN|BDNSTAT_DTS|BDNSTAT_DTSEN, len);
+			SET_BDN(*bd,
+				BDNSTAT_DTS|BDNSTAT_DTSEN, len);
 		else
-			SET_BDN(BDSnIN(endpoint,ppbi),
-				BDNSTAT_UOWN|BDNSTAT_DTSEN, len);
+			SET_BDN(*bd,
+				BDNSTAT_DTSEN, len);
 
 		ep_buf[endpoint].flags ^= EP_TX_PPBI;
 		ep_buf[endpoint].flags ^= EP_TX_DTS;
+		bd->STAT.UOWN = 1;
 #else
 		bd = &BDSnIN(endpoint,0);
 		pid = (ep_buf[endpoint].flags & EP_TX_DTS)? 1 : 0;
@@ -1560,12 +1578,13 @@ void usb_send_in_buffer(uint8_t endpoint, size_t len)
 
 		if (pid)
 			SET_BDN(*bd,
-				BDNSTAT_UOWN|BDNSTAT_DTS|BDNSTAT_DTSEN, len);
+				BDNSTAT_DTS|BDNSTAT_DTSEN, len);
 		else
 			SET_BDN(*bd,
-				BDNSTAT_UOWN|BDNSTAT_DTSEN, len);
+				BDNSTAT_DTSEN, len);
 
 		ep_buf[endpoint].flags ^= EP_TX_DTS;
+		bd->STAT.UOWN = 1;
 #endif
 	}
 }
@@ -1631,29 +1650,31 @@ void usb_arm_out_endpoint(uint8_t endpoint)
 
 	if (pid)
 		SET_BDN(BDSnOUT(endpoint,ppbi),
-			BDNSTAT_UOWN|BDNSTAT_DTSEN|BDNSTAT_DTS,
+			BDNSTAT_DTSEN|BDNSTAT_DTS,
 			ep_buf[endpoint].out_len);
 	else
 		SET_BDN(BDSnOUT(endpoint,ppbi),
-			BDNSTAT_UOWN|BDNSTAT_DTSEN,
+			BDNSTAT_DTSEN,
 			ep_buf[endpoint].out_len);
 
 	/* Alternate the PPBI */
 	ep_buf[endpoint].flags ^= EP_RX_PPBI;
 	ep_buf[endpoint].flags ^= EP_RX_DTS;
+	BDSnOUT(endpoint,ppbi).STAT.UOWN = 1;
 
 #else
 	uint8_t pid = (ep_buf[endpoint].flags & EP_RX_DTS)? 1: 0;
 	if (pid)
 		SET_BDN(BDSnOUT(endpoint,0),
-			BDNSTAT_UOWN|BDNSTAT_DTS|BDNSTAT_DTSEN,
+			BDNSTAT_DTS|BDNSTAT_DTSEN,
 			ep_buf[endpoint].out_len);
 	else
 		SET_BDN(BDSnOUT(endpoint,0),
-			BDNSTAT_UOWN|BDNSTAT_DTSEN,
+			BDNSTAT_DTSEN,
 			ep_buf[endpoint].out_len);
 
 	ep_buf[endpoint].flags ^= EP_RX_DTS;
+	BDSnOUT(endpoint,0).STAT.UOWN = 1;
 #endif
 
 }
